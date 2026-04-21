@@ -1,61 +1,73 @@
 """
-Punto de entrada de la aplicación
-Sistema de Gestión Escolar con MVVM + ORM
+Punto de entrada de la aplicación con NiceGUI
 """
 import sys
 from pathlib import Path
 
-# Agregar raíz al path
 sys.path.insert(0, str(Path(__file__).parent))
 
+from nicegui import ui
 from models.database import init_db
 from utils.file_manager import crear_estructura_completa
-from models.database import SessionLocal
-from models.entities import Periodo
+from views.admin_view import AdminView
 
-def get_active_period():
-    """Obtiene el periodo activo de la BD"""
-    db = SessionLocal()
-    try:
-        periodo = db.query(Periodo).filter(Periodo.activo == True).first()
-        if periodo:
-            return periodo.id, periodo.nombre
-        return 1, "Periodo 1"
-    finally:
-        db.close()
+admin_view = AdminView()
+
+@ui.page('/')
+def inicio():
+    # Contenedor principal centrado
+    with ui.column().classes('items-center justify-center min-h-screen w-full'):
+        with ui.card().classes('text-center p-8 w-96'):
+            ui.icon('school').classes('text-8xl text-blue-600 mx-auto')
+            ui.label('Sistema de Gestión Escolar').classes('text-3xl font-bold mt-4 text-center')
+            ui.label('Bienvenido').classes('text-xl text-gray-600 mt-2 text-center')
+            
+            with ui.row().classes('gap-6 mt-8 justify-center w-full'):
+                ui.button('👨‍🏫 Acceso Docente', on_click=lambda: ui.navigate.to('/admin'), 
+                         color='blue').classes('px-6 py-2 text-lg')
+                ui.button('👩‍🎓 Acceso Estudiante', on_click=lambda: ui.navigate.to('/estudiante'), 
+                         color='green').classes('px-6 py-2 text-lg')
+
+@ui.page('/admin')
+def admin_login():
+    if admin_view.is_authenticated:
+        ui.navigate.to('/admin/dashboard')
+    else:
+        admin_view.mostrar_login()
+
+@ui.page('/admin/dashboard')
+def admin_dashboard():
+    if not admin_view.is_authenticated:
+        ui.navigate.to('/admin')
+    else:
+        admin_view.mostrar_dashboard()
+
+@ui.page('/estudiante')
+def estudiante_panel():
+    with ui.card().classes('w-96 mx-auto mt-32 text-center p-8'):
+        ui.icon('students').classes('text-6xl text-green-600 mx-auto')
+        ui.label('Panel de Estudiantes').classes('text-2xl font-bold mt-4')
+        ui.label('Próximamente disponible').classes('text-gray-500 mt-2')
+        ui.button('Volver al inicio', on_click=lambda: ui.navigate.to('/'), color='gray').classes('mt-6')
 
 def main():
-    """Inicializa todo y arranca la aplicación"""
-    print("🚀 Iniciando Sistema de Gestión Escolar v1.0")
+    print("🚀 Iniciando Sistema de Gestión Escolar...")
     print("=" * 50)
     
-    # 1. Crear estructura de carpetas
     crear_estructura_completa()
-    
-    # 2. Inicializar base de datos con ORM
     init_db()
     
-    # 3. Mostrar periodo activo
-    periodo_id, periodo_nombre = get_active_period()
-    print(f"📅 Periodo activo: {periodo_nombre}")
-    
-    # 4. Mostrar estadísticas básicas
-    db = SessionLocal()
-    try:
-        from models.entities import Grado, Grupo, GradoGrupo
-        grados_count = db.query(Grado).count()
-        grupos_count = db.query(Grupo).count()
-        combinaciones_count = db.query(GradoGrupo).count()
-        print(f"📊 Grados: {grados_count} | Grupos: {grupos_count} | Clases: {combinaciones_count}")
-    finally:
-        db.close()
-    
+    print("✅ Sistema listo")
+    print("🌐 Abre: http://localhost:8080")
+    print("🔑 Admin: admin123")
     print("=" * 50)
-    print("✅ Sistema listo. Próximamente: interfaz gráfica con NiceGUI")
-    print("💡 Ejecuta 'uv run main.py' cuando agreguemos las vistas")
     
-    # Por ahora, mantener vivo
-    input("\nPresiona Enter para salir...")
+    ui.run(
+        title="Gestión Escolar",
+        favicon="🏫",
+        port=8080,
+        reload=False
+    )
 
 if __name__ == "__main__":
     main()
