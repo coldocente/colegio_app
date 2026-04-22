@@ -10,8 +10,11 @@ from nicegui import ui
 from models.database import init_db
 from utils.file_manager import crear_estructura_completa
 from views.admin_view import AdminView
+from views.student_view import StudentView
 
+# Instancias globales
 admin_view = AdminView()
+student_view = StudentView()
 
 @ui.page('/')
 def inicio():
@@ -43,12 +46,20 @@ def admin_dashboard():
         admin_view.mostrar_dashboard()
 
 @ui.page('/estudiante')
+def estudiante_login():
+    """Pantalla de login de estudiantes"""
+    if student_view.is_authenticated:
+        ui.navigate.to('/estudiante/panel')
+    else:
+        student_view.mostrar_login()
+
+@ui.page('/estudiante/panel')
 def estudiante_panel():
-    with ui.card().classes('w-96 mx-auto mt-32 text-center p-8'):
-        ui.icon('students').classes('text-6xl text-green-600 mx-auto')
-        ui.label('Panel de Estudiantes').classes('text-2xl font-bold mt-4')
-        ui.label('Próximamente disponible').classes('text-gray-500 mt-2')
-        ui.button('Volver al inicio', on_click=lambda: ui.navigate.to('/'), color='gray').classes('mt-6')
+    """Panel de actividades del estudiante"""
+    if not student_view.is_authenticated:
+        ui.navigate.to('/estudiante')
+    else:
+        student_view.mostrar_panel()
 
 def main():
     print("🚀 Iniciando Sistema de Gestión Escolar...")
