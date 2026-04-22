@@ -265,7 +265,12 @@ class AdminView:
                                                 ui.label(actividad.nombre).classes('text-xl font-bold')
                                                 ui.badge(estado_texto, color=estado_color).classes('text-sm')
                                                 ui.label(f'📊 {entregas_count} entregas').classes('text-sm text-gray-500')
-                                            
+                                                # Dentro de los botones de acción, añadir:
+                                                ui.button(
+                                                    '📄 PDF', 
+                                                    on_click=lambda a_id=actividad.id, g_num=grado_obj.numero, g_let=grupo_obj.letra: self.generar_pdf_entregas(a_id, g_num, g_let),
+                                                    color='purple'
+                                                ).props('flat sm')
                                             if actividad.descripcion:
                                                 ui.label(actividad.descripcion).classes('text-gray-600 mt-1')
                                             
@@ -290,6 +295,7 @@ class AdminView:
                                                     ui.button('Guardar', on_click=guardar, color='green')
                                                     ui.button('Cancelar', on_click=dialog.close).props('flat')
                                                 dialog.open()
+                                                    
                                             
                                             def toggle_actividad(a_id=actividad.id, activa_actual=actividad.activa):
                                                 if self.vm.toggle_actividad_activa(a_id):
@@ -537,6 +543,60 @@ class AdminView:
         with grados_container:
             build_grados_ui()
     
+    def generar_pdf_entregas(self, actividad_id: int, grado_num: int, grupo_letra: str):
+        """Genera un PDF con las entregas de una actividad"""
+        from fpdf import FPDF
+        from datetime import datetime
+        import tempfile
+        from pathlib import Path
+        
+        # Obtener datos
+        actividad = self.vm.get_actividad(actividad_id)
+        entregas = self.vm.get_entregas_actividad(actividad_id)
+        
+        if not entregas:
+            ui.notify('No hay entregas para generar el PDF', type='warning')
+            return
+        
+        # Crear PDF
+        pdf = FPDF()
+        pdf.add_page()
+        pdf.set_font("Arial", size=12)
+        
+        # Título
+        pdf.set_font("Arial", 'B', 16)
+        pdf.cell(200, 10, f"Informe de Entregas", ln=True, align='C')
+        pdf.set_font("Arial", size=12)
+        pdf.cell(200, 10, f"Actividad: {actividad.nombre}", ln=True, align='C')
+        pdf.cell(200, 10, f"Grupo: {grado_num}°{grupo_letra}", ln=True, align='C')
+        pdf.cell(200, 10, f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
+        pdf.ln(10)
+        
+        # Encabezados de tabla
+        pdf.set_font("Arial", 'B', 10)
+        pdf.cell(50, 10, "Estudiante", 1)
+        pdf.cell(50, 10, "Archivo Entregado", 1)
+        pdf.cell(60, 10, "Comentarios", 1)
+        pdf.cell(30, 10, "Fecha/Hora", 1)
+        pdf.ln()
+        
+        # Datos
+        pdf.set_font("Arial", size=9)
+        for entrega in entregas:
+            pdf.cell(50, 8, entrega.estudiante_nombre[:30], 1)
+            pdf.cell(50, 8, entrega.archivo_nombre[:30], 1)
+            pdf.cell(60, 8, (entrega.comentarios or "")[:40], 1)
+            pdf.cell(30, 8, entrega.fecha_hora.strftime("%d/%m/%y %H:%M"), 1)
+            pdf.ln()
+        
+        # Guardar PDF temporal
+        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
+        pdf.output(temp_file.name)
+        
+        # Descargar
+        ui.download(temp_file.name, f"entregas_{actividad.nombre}_{grado_num}{grupo_letra}.pdf")
+        ui.notify('PDF generado correctamente', type='positive')
+
     def cerrar_sesion(self):
         """Cierra la sesión del administrador"""
         self.is_authenticated = False
