@@ -100,3 +100,186 @@ class AdminViewModel:
     
     def get_contador_entregas(self, actividad_id: int, periodo_id: int, grado_num: int, grupo_letra: str) -> int:
         return get_entregas_count(periodo_id, grado_num, grupo_letra, actividad_id)
+    
+    # ========== ACTIVIDADES (CRUD) ==========
+
+    def crear_actividad(self, nombre: str, descripcion: str, grado_id: int, 
+                    grupo_id: int, periodo_id: int, grado_grupo_id: int) -> Optional[Actividad]:
+        """Crea una nueva actividad y sus carpetas correspondientes"""
+        try:
+            # Obtener datos para las rutas
+            grado = self.db.query(Grado).filter(Grado.id == grado_id).first()
+            grupo = self.db.query(Grupo).filter(Grupo.id == grupo_id).first()
+            periodo = self.db.query(Periodo).filter(Periodo.id == periodo_id).first()
+            
+            if not all([grado, grupo, periodo]):
+                return None
+            
+            # Crear actividad en BD
+            actividad = Actividad(
+                nombre=nombre,
+                descripcion=descripcion,
+                grado_id=grado_id,
+                grupo_id=grupo_id,
+                periodo_id=periodo_id,
+                grado_grupo_id=grado_grupo_id,
+                activa=True
+            )
+            self.db.add(actividad)
+            self.db.commit()
+            self.db.refresh(actividad)
+            
+            # Crear carpetas físicas
+            from utils.file_manager import crear_carpeta_actividad
+            crear_carpeta_actividad(
+                periodo_id=periodo_id,
+                grado_num=grado.numero,
+                grupo_letra=grupo.letra,
+                actividad_id=actividad.id
+            )
+            
+            return actividad
+            
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al crear actividad: {e}")
+            return None
+
+    def editar_actividad(self, actividad_id: int, nombre: str, descripcion: str) -> bool:
+        """Edita una actividad existente"""
+        try:
+            actividad = self.db.query(Actividad).filter(Actividad.id == actividad_id).first()
+            if actividad:
+                actividad.nombre = nombre
+                actividad.descripcion = descripcion
+                self.db.commit()
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al editar actividad: {e}")
+            return False
+
+    def toggle_actividad_activa(self, actividad_id: int) -> bool:
+        """Activa o desactiva una actividad"""
+        try:
+            actividad = self.db.query(Actividad).filter(Actividad.id == actividad_id).first()
+            if actividad:
+                actividad.activa = not actividad.activa
+                self.db.commit()
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al cambiar estado de actividad: {e}")
+            return False
+
+    def eliminar_actividad(self, actividad_id: int) -> bool:
+        """Elimina una actividad y sus archivos físicos"""
+        try:
+            actividad = self.db.query(Actividad).filter(Actividad.id == actividad_id).first()
+            if actividad:
+                # Eliminar carpetas físicas
+                import shutil
+                from pathlib import Path
+                
+                grado = actividad.grado
+                grupo = actividad.grupo
+                
+                actividad_path = Path(__file__).parent.parent / "storage" / f"periodo_{actividad.periodo_id}" / f"grado_{grado.numero}" / f"grupo_{grupo.letra}" / "actividades" / f"actividad_{actividad_id}"
+                
+                if actividad_path.exists():
+                    shutil.rmtree(actividad_path)
+                
+                # Eliminar de BD
+                self.db.delete(actividad)
+                self.db.commit()
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al eliminar actividad: {e}")
+            return False
+
+    def get_actividades_por_grupo(self, grado_id: int, grupo_id: int, periodo_id: int) -> List[Actividad]:
+        """Retorna todas las actividades de un grupo específico"""
+        return self.db.query(Actividad).filter(
+            Actividad.grado_id == grado_id,
+            Actividad.grupo_id == grupo_id,
+            Actividad.periodo_id == periodo_id
+        ).order_by(Actividad.fecha_creacion.desc()).all()
+
+    def get_actividad(self, actividad_id: int) -> Optional[Actividad]:
+        """Retorna una actividad por ID"""
+        return self.db.query(Actividad).filter(Actividad.id == actividad_id).first()
+
+    # ========== MATERIALES ==========
+
+    def agregar_material_archivo(self, actividad_id: int, nombre: str, ruta_archivo: str) -> bool:
+        """Agrega un material tipo archivo a una actividad"""
+        try:
+            material = Material(
+                actividad_id=actividad_id,
+                tipo='archivo',
+                nombre=nombre,
+                url=ruta_archivo
+            )
+            self.db.add(material)
+            self.db.commit()
+            return True
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al agregar material: {e}")
+            return False
+
+    def agregar_material_link(self, actividad_id: int, nombre: str, url: str) -> bool:
+        """Agrega un material tipo link a una actividad"""
+        try:
+            material = Material(
+                actividad_id=actividad_id,
+                tipo='link',
+                nombre=nombre,
+                url=url
+            )
+            self.db.add(material)
+            self.db.commit()
+            return True
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al agregar link: {e}")
+            return False
+
+    def eliminar_material(self, material_id: int) -> bool:
+        """Elimina un material"""
+        try:
+            material = self.db.query(Material).filter(Material.id == material_id).first()
+            if material:
+                # Si es archivo, eliminar el archivo físico
+                if material.tipo == 'archivo':
+                    from pathlib import Path
+                    archivo_path = Path(material.url)
+                    if archivo_path.exists():
+                        archivo_path.unlink()
+                self.db.delete(material)
+                self.db.commit()
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al eliminar material: {e}")
+            return False
+
+    def get_materiales_actividad(self, actividad_id: int) -> List[Material]:
+        """Retorna los materiales de una actividad"""
+        return self.db.query(Material).filter(Material.actividad_id == actividad_id).all()
+
+    # ========== ENTREGAS ==========
+
+    def get_entregas_actividad(self, actividad_id: int) -> List[Entrega]:
+        """Retorna todas las entregas de una actividad"""
+        return self.db.query(Entrega).filter(Entrega.actividad_id == actividad_id).order_by(Entrega.fecha_hora.desc()).all()
+
+    def get_contador_entregas_fisico(self, actividad_id: int, periodo_id: int, grado_num: int, grupo_letra: str) -> int:
+        """Cuenta entregas físicas en la carpeta"""
+        from utils.file_manager import get_entregas_count
+        return get_entregas_count(periodo_id, grado_num, grupo_letra, actividad_id)
