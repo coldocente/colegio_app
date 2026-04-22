@@ -121,17 +121,22 @@ class StudentView:
                                             ).classes('text-blue-500')
                         
                         with ui.column().classes('gap-2'):
-                            # Botón para subir entrega
+                            # Botón para subir entrega - versión corregida
+                            def abrir_dialogo(a_id=actividad.id, a_nom=actividad.nombre):
+                                self.mostrar_subir_entrega(a_id, a_nom)
+
                             ui.button(
                                 '📤 Subir Entrega', 
-                                on_click=lambda a_id=actividad.id, a_nom=actividad.nombre: self.mostrar_subir_entrega(a_id, a_nom),
+                                on_click=abrir_dialogo,
                                 color='green'
                             )
-    
+
     def mostrar_subir_entrega(self, actividad_id: int, actividad_nombre: str):
         """Muestra el diálogo para subir una entrega"""
         
-        with ui.dialog() as dialog, ui.card().classes('w-[500px]'):
+        dialog = ui.dialog()
+        
+        with dialog, ui.card().classes('w-[500px]'):
             ui.label(f'Subir Entrega: {actividad_nombre}').classes('text-xl font-bold mb-4')
             
             nombre_input = ui.input('Tu nombre completo', placeholder='Ej: Juan Pérez').classes('w-full')
@@ -139,53 +144,61 @@ class StudentView:
             comentarios_input = ui.textarea('Comentarios (opcional)', placeholder='Notas adicionales para el profesor').classes('w-full mt-2')
             
             ui.label('Archivo a entregar (máx 5MB):').classes('mt-4 font-bold')
-            file_input = ui.upload(
-                label='Seleccionar archivo',
-                on_upload=lambda e: guardar_entrega(e)
-            ).classes('w-full')
             
             error_label = ui.label('').classes('text-red-500 text-sm mt-2')
             
-            async def guardar_entrega(e):
+            # Almacenar archivo
+            archivo_info = {'archivo': None, 'nombre': None}
+            
+            def on_upload(e):
+                archivo_info['archivo'] = e.file
+                archivo_info['nombre'] = e.file.name
+                ui.notify(f'✅ Archivo seleccionado: {e.file.name}', type='positive')
+                error_label.set_text('')
+            
+            ui.upload(on_upload=on_upload).classes('w-full')
+            
+            async def guardar():
                 if not nombre_input.value:
                     error_label.set_text('El nombre es requerido')
                     return
                 
-                archivo = e.file
-                nombre_archivo = archivo.name
+                if not archivo_info['archivo']:
+                    error_label.set_text('Selecciona un archivo')
+                    return
+                
+                archivo = archivo_info['archivo']
+                nombre_archivo = archivo_info['nombre']
                 
                 # Validar tamaño
                 if archivo.size() > 5 * 1024 * 1024:
-                    error_label.set_text('El archivo excede 5MB')
+                    error_label.set_text('El archivo excede el tamaño máximo de 5MB')
                     return
                 
-                from datetime import datetime
-                import shutil
+                from pathlib import Path
                 from utils.file_manager import get_entregas_path
                 
-                # Obtener rutas
                 periodo = self.vm.get_periodo_activo()
                 grado_num = self.vm.current_grado.numero
                 grupo_letra = self.vm.current_grupo.letra
                 entregas_path = get_entregas_path(periodo.id, grado_num, grupo_letra, actividad_id)
                 entregas_path.mkdir(parents=True, exist_ok=True)
                 
-                # Contar entregas existentes del estudiante para el identificador
-                entregas_existentes = list(entregas_path.glob(f"{nombre_input.value}*"))
-                identificador = len(entregas_existentes) + 1
+                # Contar entregas existentes del estudiante
+                import re
+                patron = re.compile(rf"{re.escape(nombre_input.value)}_.*")
+                existentes = [f for f in entregas_path.iterdir() if patron.match(f.name)]
+                identificador = len(existentes) + 1
                 
-                # Crear nombre final: nombreestudiante_archivo_identificador.ext
-                from pathlib import Path
                 extension = Path(nombre_archivo).suffix
-                nombre_final = f"{nombre_input.value}_{Path(nombre_archivo).stem}_{identificador:03d}{extension}"
+                nombre_base = Path(nombre_archivo).stem
+                nombre_final = f"{nombre_input.value}_{nombre_base}_{identificador:03d}{extension}"
                 
-                # Guardar archivo
                 file_path = entregas_path / nombre_final
                 await archivo.save(str(file_path))
                 
-                # Guardar en BD
                 from models.entities import Entrega
-                nueva_entrega = Entrega(
+                entrega = Entrega(
                     actividad_id=actividad_id,
                     estudiante_nombre=nombre_input.value,
                     companero_nombre=companero_input.value if companero_input.value else None,
@@ -193,17 +206,21 @@ class StudentView:
                     archivo_nombre=nombre_archivo,
                     archivo_ruta=str(file_path)
                 )
-                self.vm.db.add(nueva_entrega)
+                self.vm.db.add(entrega)
                 self.vm.db.commit()
                 
-                ui.notify(f'✅ Entrega "{nombre_archivo}" subida', type='positive')
+                ui.notify('✅ Entrega subida correctamente', type='positive')
                 dialog.close()
             
-            ui.button('Cancelar', on_click=dialog.close).classes('mt-4 w-full')
+            with ui.row().classes('gap-2 w-full mt-4 justify-end'):
+                ui.button('Cancelar', on_click=dialog.close).props('flat')
+                ui.button('Guardar Entrega', on_click=guardar, color='green')
+        
+        dialog.open()
     
     def cerrar_sesion(self):
         """Cierra la sesión del estudiante"""
         self.is_authenticated = False
         self.vm.cerrar()
         ui.navigate.to('/estudiante')
-        ui.notify('Sesión cerrada', type='info')
+        ui.notify('Sesión cerrada', type='info')    
