@@ -51,8 +51,10 @@ class AdminView:
                     ui.button('🚪 Cerrar sesión', on_click=self.cerrar_sesion, icon='logout', color='red').props('flat')
         
         # Tabs
+
         with ui.tabs().classes('w-full bg-gray-100') as tabs:
             dashboard_tab = ui.tab('📊 Dashboard')
+            periodos_tab = ui.tab('📅 Periodos')
             grados_tab = ui.tab('📚 Grados y Grupos')
             actividades_tab = ui.tab('📝 Actividades')
         
@@ -71,6 +73,14 @@ class AdminView:
                         stats_container.clear()
                         with stats_container:
                             with ui.row().classes('gap-6 mt-6 w-full justify-center'):
+                                # En el panel Dashboard, dentro de la tarjeta principal:
+                                # Tarjeta Periodos
+                                periodo_activo = self.vm.get_periodo_activo()
+                                with ui.row().classes('items-center gap-4 mb-4'):
+                                    ui.label(f'Periodo activo:').classes('text-lg')
+                                    ui.label(f'{periodo_activo.nombre}').classes('text-xl font-bold text-blue-600')
+                                    ui.badge('Activo', color='green').classes('text-sm')
+
                                 # Tarjeta Grados
                                 with ui.card().classes('text-center p-4 w-48 bg-blue-50'):
                                     ui.icon('school').classes('text-4xl text-blue-600 mx-auto')
@@ -99,6 +109,66 @@ class AdminView:
                     # Nota: las stats se actualizarán cuando se cambie el estado desde la pestaña Grados
                     ui.label('💡 Los cambios en grados/grupos se reflejan automáticamente').classes('text-gray-400 text-sm mt-6 text-center')
             
+            # Panel Periodos (nuevo)
+            # ========== NUEVO PANEL PERIODOS ==========
+            with ui.tab_panel(periodos_tab):
+                with ui.card().classes('w-full p-6'):
+                    ui.label('Gestión de Periodos Académicos').classes('text-2xl font-bold mb-2')
+                    ui.label('Solo puede haber un periodo activo a la vez. Los estudiantes solo verán las actividades del periodo activo.').classes('text-gray-600 mb-6')
+                    
+                    periodos = self.vm.get_todos_periodos()
+                    periodo_activo = self.vm.get_periodo_activo()
+                    
+                    with ui.row().classes('gap-4 w-full flex-wrap justify-start'):
+                        for periodo in periodos:
+                            es_activo = (periodo.id == periodo_activo.id) if periodo_activo else False
+                            
+                            # Contar actividades de este periodo
+                            from models.entities import Actividad
+                            actividades_count = self.vm.db.query(Actividad).filter(
+                                Actividad.periodo_id == periodo.id
+                            ).count()
+                            
+                            # Contar entregas de este periodo
+                            from models.entities import Entrega
+                            entregas_count = self.vm.db.query(Entrega).join(Actividad).filter(
+                                Actividad.periodo_id == periodo.id
+                            ).count()
+                            
+                            with ui.card().classes(f'w-72 p-4 shadow-lg hover:shadow-xl transition-shadow'):
+                                with ui.row().classes('justify-between items-start w-full'):
+                                    ui.label(periodo.nombre).classes('text-xl font-bold')
+                                    if es_activo:
+                                        ui.badge('ACTIVO', color='green').classes('text-sm')
+                                    else:
+                                        ui.badge('Inactivo', color='gray').classes('text-sm')
+                                
+                                ui.separator().classes('my-3')
+                                
+                                with ui.column().classes('gap-1'):
+                                    ui.label(f'📝 Actividades: {actividades_count}').classes('text-sm')
+                                    ui.label(f'📊 Entregas: {entregas_count}').classes('text-sm')
+                                
+                                ui.separator().classes('my-3')
+                                
+                                if not es_activo:
+                                    def activar_periodo(p_id=periodo.id, p_nombre=periodo.nombre):
+                                        if self.vm.activar_periodo(p_id):
+                                            ui.notify(f'✅ {p_nombre} activado correctamente', type='success')
+                                            ui.navigate.to('/admin/dashboard')
+                                        else:
+                                            ui.notify('❌ Error al activar periodo', type='error')
+                                    
+                                    ui.button('Activar Periodo', on_click=activar_periodo, color='blue', icon='play_arrow').classes('w-full')
+                                else:
+                                    ui.button('Periodo Activo', color='green', icon='check_circle').props('flat disabled').classes('w-full')
+                    
+                    with ui.card().classes('w-full p-4 mt-6 bg-blue-50'):
+                        with ui.row().classes('items-center gap-2'):
+                            ui.icon('info', size='24px').classes('text-blue-600')
+                            ui.label('📌 Al cambiar el periodo activo, los estudiantes solo verán las actividades del nuevo periodo.').classes('text-sm text-blue-800')
+
+
             # Panel Grados y Grupos
             with ui.tab_panel(grados_tab):
                 with ui.card().classes('w-full p-6'):
@@ -544,58 +614,119 @@ class AdminView:
             build_grados_ui()
     
     def generar_pdf_entregas(self, actividad_id: int, grado_num: int, grupo_letra: str):
-        """Genera un PDF con las entregas de una actividad"""
+        """Genera un PDF y lo abre en una nueva pestaña"""
         from fpdf import FPDF
         from datetime import datetime
-        import tempfile
         from pathlib import Path
+        from utils.file_manager import STORAGE_ROOT
+        import traceback
         
-        # Obtener datos
-        actividad = self.vm.get_actividad(actividad_id)
-        entregas = self.vm.get_entregas_actividad(actividad_id)
-        
-        if not entregas:
-            ui.notify('No hay entregas para generar el PDF', type='warning')
-            return
-        
-        # Crear PDF
-        pdf = FPDF()
-        pdf.add_page()
-        pdf.set_font("Arial", size=12)
-        
-        # Título
-        pdf.set_font("Arial", 'B', 16)
-        pdf.cell(200, 10, f"Informe de Entregas", ln=True, align='C')
-        pdf.set_font("Arial", size=12)
-        pdf.cell(200, 10, f"Actividad: {actividad.nombre}", ln=True, align='C')
-        pdf.cell(200, 10, f"Grupo: {grado_num}°{grupo_letra}", ln=True, align='C')
-        pdf.cell(200, 10, f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M')}", ln=True, align='C')
-        pdf.ln(10)
-        
-        # Encabezados de tabla
-        pdf.set_font("Arial", 'B', 10)
-        pdf.cell(50, 10, "Estudiante", 1)
-        pdf.cell(50, 10, "Archivo Entregado", 1)
-        pdf.cell(60, 10, "Comentarios", 1)
-        pdf.cell(30, 10, "Fecha/Hora", 1)
-        pdf.ln()
-        
-        # Datos
-        pdf.set_font("Arial", size=9)
-        for entrega in entregas:
-            pdf.cell(50, 8, entrega.estudiante_nombre[:30], 1)
-            pdf.cell(50, 8, entrega.archivo_nombre[:30], 1)
-            pdf.cell(60, 8, (entrega.comentarios or "")[:40], 1)
-            pdf.cell(30, 8, entrega.fecha_hora.strftime("%d/%m/%y %H:%M"), 1)
-            pdf.ln()
-        
-        # Guardar PDF temporal
-        temp_file = tempfile.NamedTemporaryFile(delete=False, suffix='.pdf')
-        pdf.output(temp_file.name)
-        
-        # Descargar
-        ui.download(temp_file.name, f"entregas_{actividad.nombre}_{grado_num}{grupo_letra}.pdf")
-        ui.notify('PDF generado correctamente', type='positive')
+        try:
+            # Obtener datos
+            actividad = self.vm.get_actividad(actividad_id)
+            entregas = self.vm.get_entregas_actividad(actividad_id)
+            
+            if not entregas:
+                ui.notify('No hay entregas para generar el PDF', type='warning')
+                return
+            
+            # Crear PDF
+            pdf = FPDF()
+            pdf.add_page()
+            pdf.set_font("Arial", size=12)
+            
+            # Título
+            pdf.set_font("Arial", 'B', 16)
+            pdf.cell(200, 15, "Informe de Entregas", ln=True, align='C')
+            
+            # Información
+            pdf.set_font("Arial", 'B', 12)
+            pdf.cell(200, 8, f"Actividad: {actividad.nombre}", ln=True, align='C')
+            pdf.set_font("Arial", '', 11)
+            pdf.cell(200, 8, f"Grupo: {grado_num}°{grupo_letra}", ln=True, align='C')
+            pdf.cell(200, 8, f"Fecha: {datetime.now().strftime('%d/%m/%Y %H:%M:%S')}", ln=True, align='C')
+            pdf.ln(10)
+            
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(5)
+            
+            # Encabezados
+            pdf.set_font("Arial", 'B', 8)
+            pdf.set_fill_color(200, 220, 255)
+            
+            col_estudiante = 40
+            col_companero = 40
+            #col_archivo_original = 35
+            col_archivo_guardado = 75
+            col_fecha = 30
+            
+            pdf.cell(col_estudiante, 10, "Estudiante", 1, 0, 'C', 1)
+            pdf.cell(col_companero, 10, "Compañero/a", 1, 0, 'C', 1)
+            #pdf.cell(col_archivo_original, 10, "Archivo Original", 1, 0, 'C', 1)
+            pdf.cell(col_archivo_guardado, 10, "Archivo Guardado", 1, 0, 'C', 1)
+            pdf.cell(col_fecha, 10, "Fecha/Hora", 1, 1, 'C', 1)
+            
+            # Datos
+            pdf.set_font("Arial", '', 7)
+            fill = False
+            
+            for entrega in entregas:
+                nombre_guardado = Path(entrega.archivo_ruta).name if entrega.archivo_ruta else "-"
+                
+                estudiante = entrega.estudiante_nombre[:20]
+                companero = entrega.companero_nombre[:20] if entrega.companero_nombre else "-"
+                #archivo_orig = entrega.archivo_nombre[:20]
+                archivo_guard = nombre_guardado[:45]
+                fecha = entrega.fecha_hora.strftime("%d/%m/%y %H:%M")
+                
+                pdf.cell(col_estudiante, 7, estudiante, 1, 0, 'L', fill)
+                pdf.cell(col_companero, 7, companero, 1, 0, 'L', fill)
+                #pdf.cell(col_archivo_original, 7, archivo_orig, 1, 0, 'L', fill)
+                pdf.cell(col_archivo_guardado, 7, archivo_guard, 1, 0, 'L', fill)
+                pdf.cell(col_fecha, 7, fecha, 1, 1, 'L', fill)
+                
+                fill = not fill
+            
+            # Comentarios
+            comentarios_existentes = [e for e in entregas if e.comentarios]
+            if comentarios_existentes:
+                pdf.ln(3)
+                pdf.set_font("Arial", 'B', 9)
+                pdf.cell(200, 8, "Comentarios:", ln=True)
+                pdf.set_font("Arial", '', 8)
+                
+                for entrega in comentarios_existentes:
+                    pdf.set_font("Arial", 'B', 8)
+                    pdf.cell(35, 5, f"{entrega.estudiante_nombre[:15]}:", 0, 0)
+                    pdf.set_font("Arial", '', 8)
+                    pdf.multi_cell(150, 5, entrega.comentarios)
+                    pdf.ln(1)
+            
+            # Resumen
+            pdf.ln(3)
+            pdf.line(10, pdf.get_y(), 200, pdf.get_y())
+            pdf.ln(3)
+            
+            pdf.set_font("Arial", 'B', 9)
+            pdf.cell(200, 6, f"Total de entregas: {len(entregas)}", ln=True)
+            
+            entregas_pareja = sum(1 for e in entregas if e.companero_nombre)
+            if entregas_pareja > 0:
+                pdf.cell(200, 6, f"Entregas en pareja: {entregas_pareja}", ln=True)
+            
+            # Guardar PDF
+            from main import TEMP_PDF_DIR
+            nombre_pdf = f"entregas_{actividad.id}_{datetime.now().strftime('%Y%m%d_%H%M%S')}.pdf"
+            pdf_path = TEMP_PDF_DIR / nombre_pdf
+            pdf.output(str(pdf_path))
+            
+            # Abrir en nueva pestaña
+            ui.navigate.to(f'/ver_pdf/{nombre_pdf}')
+            ui.notify(f'✅ PDF generado con {len(entregas)} entregas', type='positive')
+            
+        except Exception as err:
+            print(f"ERROR: {traceback.format_exc()}")
+            ui.notify(f'Error al generar PDF: {err}', type='error')
 
     def cerrar_sesion(self):
         """Cierra la sesión del administrador"""

@@ -283,3 +283,33 @@ class AdminViewModel:
         """Cuenta entregas físicas en la carpeta"""
         from utils.file_manager import get_entregas_count
         return get_entregas_count(periodo_id, grado_num, grupo_letra, actividad_id)
+    
+    # ========== PERIODOS ==========
+
+    def get_todos_periodos(self) -> List[Periodo]:
+        """Retorna todos los periodos"""
+        return self.db.query(Periodo).order_by(Periodo.id).all()
+
+    def activar_periodo(self, periodo_id: int) -> bool:
+        """Activa un periodo y desactiva los demás"""
+        try:
+            # Desactivar todos
+            self.db.query(Periodo).update({Periodo.activo: False})
+            # Activar el seleccionado
+            periodo = self.db.query(Periodo).filter(Periodo.id == periodo_id).first()
+            if periodo:
+                periodo.activo = True
+                self.db.commit()
+                self._periodo_activo = periodo
+                return True
+            return False
+        except Exception as e:
+            self.db.rollback()
+            print(f"Error al activar periodo: {e}")
+            return False
+
+    def get_periodo_activo(self) -> Optional[Periodo]:
+        """Retorna el periodo activo"""
+        if not self._periodo_activo:
+            self._periodo_activo = self.db.query(Periodo).filter(Periodo.activo == True).first()
+        return self._periodo_activo
