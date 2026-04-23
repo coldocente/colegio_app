@@ -1,19 +1,28 @@
 [project]
 name = "colegio-app"
-version = "0.1.0"
+version = "1.0.0"
 description = "Sistema de Gestión Escolar con NiceGUI"
 readme = "README.md"
-requires-python = ">=3.14"
+requires-python = ">=3.11"
 dependencies = [
+    "nicegui>=1.4.30",
+    "sqlalchemy>=2.0.35",
     "fpdf>=1.7.2",
-    "nicegui>=3.10.0",
-    "pillow>=12.2.0",
-    "sqlalchemy>=2.0.49",
+    "pillow>=10.4.0",
 ]
 
-[build-system]
-requires = ["hatchling"]
-build-backend = "hatchling.build"
+# Esta sección le dice a Hatch que no intente construir un paquete
+[tool.hatch.build.targets.wheel]
+bypass-selection = true
+packages = ["."]
 
-[tool.uv]
-dev-dependencies = []
+# O alternativamente, indicar explícitamente qué incluir
+[tool.hatch.build]
+exclude = [
+    ".venv/",
+    "__pycache__/",
+    "*.pyc",
+    "data/",
+    "storage/",
+    "backups/",
+]
