@@ -155,7 +155,7 @@ wheels = [
 [[package]]
 name = "colegio-app"
 version = "0.1.0"
-source = { virtual = "." }
+source = { editable = "." }
 dependencies = [
     { name = "fpdf" },
     { name = "nicegui" },
@@ -170,6 +170,9 @@ requires-dist = [
     { name = "pillow", specifier = ">=12.2.0" },
     { name = "sqlalchemy", specifier = ">=2.0.49" },
 ]
+
+[package.metadata.requires-dev]
+dev = []
 
 [[package]]
 name = "colorama"

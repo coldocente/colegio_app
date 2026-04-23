@@ -6,11 +6,12 @@ services:
     plan: free
     region: oregon
     buildCommand: |
-      pip install uv
-      uv pip install --system -r requirements.txt
+      uv sync --frozen && uv cache prune --ci
     startCommand: python main.py
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
       - key: RENDER
+        value: true
+      - key: UV_SYSTEM_PYTHON
         value: true
