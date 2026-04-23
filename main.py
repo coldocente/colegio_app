@@ -3,11 +3,6 @@ Punto de entrada de la aplicación con NiceGUI
 """
 import sys
 from pathlib import Path
-
-
-from fastapi.responses import FileResponse
-from fastapi.staticfiles import StaticFiles
-from utils.file_manager import STORAGE_ROOT
 import os
 
 sys.path.insert(0, str(Path(__file__).parent))
@@ -22,9 +17,8 @@ from views.student_view import StudentView
 admin_view = AdminView()
 student_view = StudentView()
 
-# Crear directorio para PDFs temporales si no existe
-TEMP_PDF_DIR = STORAGE_ROOT / "temp_pdfs"
-TEMP_PDF_DIR.mkdir(parents=True, exist_ok=True)
+# Detectar entorno de producción
+IS_RENDER = 'RENDER' in os.environ
 
 @ui.page('/')
 def inicio():
@@ -74,10 +68,9 @@ def estudiante_panel():
 @ui.page('/ver_pdf/{filename}')
 def ver_pdf(filename: str):
     """Muestra un PDF en una página completa"""
-    import os
-    from pathlib import Path
+    from utils.file_manager import STORAGE_ROOT
     
-    pdf_path = TEMP_PDF_DIR / filename
+    pdf_path = STORAGE_ROOT / "temp_pdfs" / filename
     
     if not pdf_path.exists():
         ui.label('Archivo no encontrado').classes('text-center text-red-500 mt-32 text-xl')
@@ -128,14 +121,18 @@ def main():
     init_db()
     
     print("✅ Sistema listo")
-    print("🌐 Abre: http://localhost:8081")
-    print("🔑 Admin: admin123")
+
+    # Obtener puerto de Render o usar 8080 por defecto
+    port = int(os.environ.get('PORT', 8080))
+    
+    print(f"🌐 Servidor iniciado en puerto {port}")
     print("=" * 50)
     
     ui.run(
         title="Gestión Escolar",
         favicon="🏫",
-        port=8081,
+        host='0.0.0.0',
+        port=port,
         reload=False
     )
 

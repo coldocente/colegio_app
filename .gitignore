@@ -1,10 +1,23 @@
 # Python
-.venv/
 __pycache__/
 *.pyc
 *.pyo
 *.pyd
 .Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+
+# UV
+uv.lock
 
 # Base de datos
 data/*.db
@@ -21,3 +34,10 @@ storage/
 
 # Logs
 *.log
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Render
+.env

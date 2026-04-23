@@ -2,10 +2,15 @@ services:
   - type: web
     name: colegio-app
     runtime: python
-    repo: https://github.com/tu-usuario/colegio_app
+    repo: https://github.com/TU_USUARIO/colegio_app
     plan: free
+    region: oregon
+    buildCommand: |
+      pip install uv
+      uv pip install --system -r requirements.txt
+    startCommand: python main.py
     envVars:
       - key: PYTHON_VERSION
-        value: 3.10.0
-    buildCommand: pip install -r requirements.txt
-    startCommand: python main.py
+        value: 3.11.0
+      - key: RENDER
+        value: true
